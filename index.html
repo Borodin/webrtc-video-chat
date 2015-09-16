@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>webrtc_video_chat</title>
+</head>
+<body>
+<select size="7" style="width:120px;">
+</select>
+<video id="localVideo" autoplay></video>
+<video id="remoteVideo" autoplay></video>
+<br>
+<textarea name="" id="chat" cols="61" rows="6"></textarea>
+<br>
+<input type="text" id="msg" size="47"><input type="button" value="send" id="send">
+<button id="callButton" onclick="createOffer()">Call</button>
+
+<script>
+var PeerConnection = window.mozRTCPeerConnection || window.webkitRTCPeerConnection;
+var IceCandidate = window.mozRTCIceCandidate || window.RTCIceCandidate;
+var SessionDescription = window.mozRTCSessionDescription || window.RTCSessionDescription;
+navigator.getUserMedia = navigator.getUserMedia || navigator.mozGetUserMedia || navigator.webkitGetUserMedia;
+
+var userName = localStorage.userName = localStorage.userName || prompt('user name:', '');
+
+var pc, users, id;
+var userSelect = 0;
+var chat = [];
+
+var select = document.querySelector('select');
+select.onchange = function(){
+	userSelect = parseInt(this.value);
+	document.querySelector('#chat').value = chat[userSelect]||'';
+};
+
+document.querySelector('#send').onclick = function(){
+	var msg = document.querySelector('#msg');
+	sendMessage('msg', msg.value, userSelect);
+	msg.value = '';
+};
+
+navigator.getUserMedia({ audio: true, video: {mandatory:{maxWidth: 160, maxHeight: 120}}}, gotStream, console.error);
+
+function gotStream(stream) {
+	document.getElementById("callButton").style.display = 'inline-block';
+	document.getElementById("localVideo").src = URL.createObjectURL(stream);
+
+	pc = new PeerConnection(null);
+	pc.addStream(stream);
+	pc.onicecandidate = gotIceCandidate;
+	pc.onaddstream = gotRemoteStream;
+}
+
+
+
+function createOffer() {
+	pc.createOffer(
+		gotLocalDescription, 
+		console.error,
+		{ 'mandatory': { 'OfferToReceiveAudio': true, 'OfferToReceiveVideo': true } }
+	);
+}
+
+
+function createAnswer() {
+	pc.createAnswer(
+		gotLocalDescription,
+		console.error, 
+		{ 'mandatory': { 'OfferToReceiveAudio': true, 'OfferToReceiveVideo': true } }
+	);
+}
+
+
+function gotLocalDescription(description){
+	pc.setLocalDescription(description);
+	sendMessage('webrtc', description, userSelect);
+}
+
+function gotIceCandidate(event){
+	if (event.candidate) {
+		sendMessage('webrtc',{
+			type: 'candidate',
+			label: event.candidate.sdpMLineIndex,
+			id: event.candidate.sdpMid,
+			candidate: event.candidate.candidate
+		}, userSelect);
+	}
+}
+
+function gotRemoteStream(event){
+	document.getElementById("remoteVideo").src = URL.createObjectURL(event.stream);
+}
+
+
+function setClientList(list){
+	select.innerHTML = '';
+	for(var i=0; i<list.length; i++)if(list[i]){
+		var opt = document.createElement('option');
+		opt.innerHTML = list[i].name;
+		opt.value = list[i].id;
+		if(userSelect==i)opt.selected = true;
+		select.appendChild(opt);
+	}
+	select.onchange();
+}
+
+//Socket
+
+function sendMessage(type, message, to){
+	message = JSON.stringify({type:type, content:message, to:to});
+	socket.send(message);
+}
+
+var socket = new WebSocket('ws://'+location.hostname+':8081');
+
+socket.onopen = function() {
+	console.info("Connected.");
+	sendMessage('setName', userName);
+};
+
+socket.onclose = function(event) {
+	if (event.wasClean) {
+		console.info('clouse conecting');
+	} else {
+		location = location;
+		console.warn('server disconected');
+	}
+	console.info('Code: ' + event.code + ' Msg: ' + event.reason);
+};
+
+socket.onmessage = function(event) {
+	var message = JSON.parse(event.data);
+	var type = message.type;
+	var content = message.content;
+	var from = message.from;
+
+	if(type == 'webrtc'){
+		userSelect = select.value = from;
+		if (content.type == 'offer') {
+			if(confirm('Принять вызов от '+users[from].name+'?')){				
+				pc.setRemoteDescription(new SessionDescription(content));
+				createAnswer();
+			}
+		} 
+		else if (content.type == 'answer') {
+			pc.setRemoteDescription(new SessionDescription(content));
+		} 
+		else if (content.type == 'candidate') {
+			var candidate = new IceCandidate({sdpMLineIndex: content.label, candidate: content.candidate});
+			pc.addIceCandidate(candidate);
+		}
+	}else if(type == 'clientList'){
+		users = content;
+		setClientList(content);
+	}else if(type == 'setId'){
+		id = content;
+	}else if(type == 'msg'){
+		if(!chat[from])chat[from]='';
+		if(!chat[userSelect])chat[userSelect]='';
+		var msg = users[from].name +':'+ content +'\n';
+		from==id?chat[userSelect]+=msg:chat[from]+=msg;
+		select.onchange();
+	}
+};
+
+
+</script>
+</body>
+</html>

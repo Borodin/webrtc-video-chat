@@ -1,0 +1,29 @@
+{
+  "name": "webrtc-video-chat",
+  "version": "0.0.1",
+  "description": "Simple websocket video chat",
+  "main": "index.js",
+  "scripts": {
+    "test": "node server.js",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Borodin/webrtc-video-chat.git"
+  },
+  "keywords": [
+    "webrtc",
+    "video",
+    "chat"
+  ],
+  "author": "Maxim Borodin <borodinmk@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Borodin/webrtc-video-chat/issues"
+  },
+  "homepage": "https://github.com/Borodin/webrtc-video-chat",
+  "dependencies": {
+    "node-static": "^0.7.7",
+    "ws": "^0.8.0"
+  }
+}
